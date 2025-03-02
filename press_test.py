@@ -12,8 +12,8 @@ import torch.optim as optim
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from torchvision.utils import make_grid
-from vector_quant import VectorQuantizer, VectorQuantizerEMA
-from enc_dec import IMUEncoder, IMUDecoder
+from vector_quant import VectorQuantizer, VectorQuantizerEMA, ResidualQuantizer
+from enc_dec import PressEncoder, PressDecoder
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(device)
@@ -59,25 +59,29 @@ num_residual_layers = 2
 
 embedding_dim = 64
 num_embeddings = 512
+num_quantizers = 3
 
 commitment_cost = 0.25
 decay = 0.99
 learning_rate = 1e-3
+
 
 class Model(nn.Module):
     def __init__(self, num_hiddens, num_residual_layers, num_residual_hiddens, 
                  num_embeddings, embedding_dim, commitment_cost, decay=0):
         super(Model, self).__init__()
         
-        self._encoder = IMUEncoder(3, num_hiddens, num_residual_layers, num_residual_hiddens)
+        self._encoder = PressEncoder(3, num_hiddens, num_residual_layers, num_residual_hiddens)
         self._pre_vq_conv = nn.Conv1d(in_channels=num_hiddens, out_channels=embedding_dim, kernel_size=1, stride=1)
         
         if decay > 0.0:
-            self._vq_vae = VectorQuantizerEMA(num_embeddings, embedding_dim, commitment_cost, decay)
+            self._vq_vae = self._vq_vae = ResidualQuantizer(num_quantizers, num_embeddings, embedding_dim, commitment_cost)
+
         else:
-            self._vq_vae = VectorQuantizer(num_embeddings, embedding_dim, commitment_cost)
+            self._vq_vae = self._vq_vae = ResidualQuantizer(num_quantizers, num_embeddings, embedding_dim, commitment_cost)
+
             
-        self._decoder = IMUDecoder(embedding_dim, num_hiddens, num_residual_layers, num_residual_hiddens)
+        self._decoder = PressDecoder(embedding_dim, num_hiddens, num_residual_layers, num_residual_hiddens)
 
     def forward(self, x):
         z = self._encoder(x)
@@ -96,15 +100,17 @@ class Model_linear(nn.Module):
                  num_embeddings, embedding_dim, commitment_cost, decay=0):
         super(Model_linear, self).__init__()
         
-        self._encoder = IMUEncoder(3, num_hiddens, num_residual_layers, num_residual_hiddens)
+        self._encoder = PressEncoder(3, num_hiddens, num_residual_layers, num_residual_hiddens)
         self._pre_vq_conv = nn.Conv1d(in_channels=num_hiddens, out_channels=embedding_dim, kernel_size=1, stride=1)
         
         if decay > 0.0:
-            self._vq_vae = VectorQuantizerEMA(num_embeddings, embedding_dim, commitment_cost, decay)
+            self._vq_vae = self._vq_vae = ResidualQuantizer(num_quantizers, num_embeddings, embedding_dim, commitment_cost)
+
         else:
-            self._vq_vae = VectorQuantizer(num_embeddings, embedding_dim, commitment_cost)
+            self._vq_vae = self._vq_vae = ResidualQuantizer(num_quantizers, num_embeddings, embedding_dim, commitment_cost)
+
             
-        self._decoder = IMUDecoder(embedding_dim, num_hiddens, num_residual_layers, num_residual_hiddens)
+        self._decoder = PressDecoder(embedding_dim, num_hiddens, num_residual_layers, num_residual_hiddens)
 
     def forward(self, x):
         z = self._encoder(x)

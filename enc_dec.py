@@ -39,9 +39,9 @@ class ResidualStack(nn.Module):
         return F.relu(x)
 
 
-class IMUResidual(nn.Module):
+class PressResidual(nn.Module):
     def __init__(self, in_channels, num_hiddens, num_residual_hiddens):
-        super(IMUResidual, self).__init__()
+        super(PressResidual, self).__init__()
         self._block = nn.Sequential(
             nn.ReLU(True),
             nn.Conv1d(in_channels=in_channels,
@@ -61,7 +61,7 @@ class IMUResidualStack(nn.Module):
     def __init__(self, in_channels, num_hiddens, num_residual_layers, num_residual_hiddens):
         super(IMUResidualStack, self).__init__()
         self._num_residual_layers = num_residual_layers
-        self._layers = nn.ModuleList([IMUResidual(in_channels, num_hiddens, num_residual_hiddens)
+        self._layers = nn.ModuleList([PressResidual(in_channels, num_hiddens, num_residual_hiddens)
                              for _ in range(self._num_residual_layers)])
 
     def forward(self, x):
@@ -106,9 +106,9 @@ class Encoder(nn.Module):
         return self._residual_stack(x)
         
 
-class IMUEncoder(nn.Module):
+class PressEncoder(nn.Module):
     def __init__(self, in_channels, num_hiddens, num_residual_layers, num_residual_hiddens):
-        super(IMUEncoder, self).__init__()
+        super(PressEncoder, self).__init__()
 
         self._conv_1 = nn.Conv1d(in_channels=in_channels,
                                  out_channels=num_hiddens//2,
@@ -175,9 +175,9 @@ class Decoder(nn.Module):
         
         return self._conv_trans_2(x)
         
-class IMUDecoder(nn.Module):
+class PressDecoder(nn.Module):
     def __init__(self, in_channels, num_hiddens, num_residual_layers, num_residual_hiddens):
-        super(IMUDecoder, self).__init__()
+        super(PressDecoder, self).__init__()
         
         self._conv_1 = nn.Conv1d(in_channels=in_channels,
                                  out_channels=num_hiddens,

@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 import random
 import logging
-from imu_test import Model as VQ_VAE_Model
+from press_test import Model as VQ_VAE_Model
 from sslearning.data.data_loader import NormalDataset
 import torch.optim as optim
 import collections
@@ -20,12 +20,12 @@ CONFIG = {
     "input_length": 64,
     "batch_size": 1024,  # Reduced for stability
     "num_training_updates": 15000,
-    "model_save_path": "vqvaemodel_fold_{fold}.pth",
+    "model_save_path": "vqvaemodel_wisdom_512.pth",
     "model_params": {
         "num_hiddens": 64,
         "num_residual_hiddens": 64,
         "num_residual_layers": 3,
-        "embedding_dim": 128,
+        "embedding_dim": 512,  #36,96,256,512
         "num_embeddings": 1028,
         "commitment_cost": 0.25,
         "decay": 0.99,
@@ -68,6 +68,12 @@ def prepare_data_loaders(train_idxs, test_idxs, X, Y, groups, batch_size):
     X_train, X_val = tmp_X_train[final_train_idxs], tmp_X_train[final_val_idxs]
     Y_train, Y_val = tmp_Y_train[final_train_idxs], tmp_Y_train[final_val_idxs]
 
+    # Save training dataset for later testing
+    # np.save("X_train.npy", X_train)
+    # np.save("Y_train.npy", Y_train)
+    # np.save("P_train.npy", group_train[final_train_idxs])  # Save corresponding PIDs
+    # logging.info("Training dataset saved.")
+
     train_dataset = NormalDataset(X_train, Y_train, name="train", isLabel=True)
     val_dataset = NormalDataset(X_val, Y_val, name="val", isLabel=True)
     test_dataset = NormalDataset(X_test, Y_test, pid=groups[test_idxs], name="test", isLabel=True)
@@ -98,9 +104,10 @@ def train_model(X, Y, P, config):
         for update_idx in range(config["num_training_updates"]):
             for data, _ in train_loader:  # Iterate properly over the dataset
                 data = data.to(device)
+                # print(data.shape)
                 optimizer.zero_grad()
 
-                vq_loss, data_recon, perplexity = model(data)
+                vq_loss, data_recon, perplexity,_ = model(data)
                 recon_error = F.mse_loss(data_recon, data) / data_variance
                 loss = recon_error + vq_loss
 
@@ -117,21 +124,25 @@ def train_model(X, Y, P, config):
                 logging.info(f"Update {update_idx + 1}: Recon Error: {avg_recon:.3f}, Perplexity: {avg_perplexity:.3f}")
 
         # Save the model
-        model_path = config["model_save_path"].format(fold=fold_idx)
+        model_path = config["model_save_path"]
         torch.save(model.state_dict(), model_path)
         logging.info(f"Model saved at {model_path}")
+
+        break
 
 # Main execution
 if __name__ == "__main__":
     set_seed(CONFIG["random_seed"])
 
     # Load dataset
-    root_path = "/home/lala/Downloads/"
-    dataset = "oppo_33hz_w10_o5"
+    root_path = "/home/dfki/dee/VQKANClassifier-main/Datasets/"
+    dataset = "wisdm_30hz_clean"
     X = np.load(f"{root_path}/{dataset}/X.npy")
     Y = np.load(f"{root_path}/{dataset}/Y.npy")
     P = np.load(f"{root_path}/{dataset}/pid.npy")
 
+    print(X.shape)
+    print(Y.shape)
     # Resize data if needed
     if X.shape[1] != CONFIG["input_length"]:
         X = resize_data(X, CONFIG["input_length"])

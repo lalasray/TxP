@@ -12,7 +12,7 @@ import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from torchvision.utils import make_grid
 from vector_quant import VectorQuantizer, VectorQuantizerEMA
-from enc_dec import IMUEncoder, IMUDecoder
+from enc_dec import PressEncoder, PressDecoder
 from scipy.interpolate import interp1d
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 from imu_test import Model as VQ_VAE_Model

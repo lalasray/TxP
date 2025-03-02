@@ -120,3 +120,52 @@ class VectorQuantizerEMA(nn.Module):
         
         # convert quantized from BHWC -> BCHW
         return loss, quantized.permute(0, 3, 1, 2).contiguous(), perplexity, encodings
+
+class ResidualQuantizer(nn.Module):
+    def __init__(self, num_quantizers, num_embeddings, embedding_dim, commitment_cost):
+        super(ResidualQuantizer, self).__init__()
+        
+        self.num_quantizers = num_quantizers
+        self.commitment_cost = commitment_cost
+        
+        self.quantizers = nn.ModuleList([
+            nn.Embedding(num_embeddings, embedding_dim) for _ in range(num_quantizers)
+        ])
+        
+        for quantizer in self.quantizers:
+            quantizer.weight.data.uniform_(-1 / num_embeddings, 1 / num_embeddings)
+    
+    def forward(self, inputs):
+        inputs = inputs.permute(0, 2, 3, 1).contiguous()
+        input_shape = inputs.shape
+        flat_input = inputs.view(-1, input_shape[-1])
+        residual = flat_input
+        quantized_list = []
+        encoding_indices_list = []
+        
+        for quantizer in self.quantizers:
+            distances = (
+                torch.sum(residual ** 2, dim=1, keepdim=True)
+                + torch.sum(quantizer.weight ** 2, dim=1)
+                - 2 * torch.matmul(residual, quantizer.weight.t())
+            )
+            encoding_indices = torch.argmin(distances, dim=1).unsqueeze(1)
+            encodings = torch.zeros(encoding_indices.shape[0], quantizer.num_embeddings, device=inputs.device)
+            encodings.scatter_(1, encoding_indices, 1)
+            quantized = torch.matmul(encodings, quantizer.weight)
+            residual = residual - quantized
+            
+            quantized_list.append(quantized)
+            encoding_indices_list.append(encoding_indices)
+        
+        quantized_output = sum(quantized_list).view(input_shape)
+        
+        e_latent_loss = F.mse_loss(quantized_output.detach(), inputs)
+        q_latent_loss = F.mse_loss(quantized_output, inputs.detach())
+        loss = q_latent_loss + self.commitment_cost * e_latent_loss
+        
+        quantized_output = inputs + (quantized_output - inputs).detach()
+        avg_probs = torch.mean(torch.cat(encoding_indices_list, dim=1).float(), dim=0)
+        perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs + 1e-10)))
+        
+        return loss, quantized_output.permute(0, 3, 1, 2).contiguous(), perplexity, encoding_indices_list
